@@ -5,6 +5,14 @@ const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const WORKER_URL = process.env.WORKER_URL || "https://lesta-hub.prskrda.workers.dev";
 const PASSWORD = "lesta4ever437713";
 
+// ═══ YETKİLİ KİŞİLER ═══
+const ALLOWED_IDS = [
+  "1433119562454401056",
+  "1505609149487124480",
+  "1482307799948984402",
+  "1399802460649947207"
+];
+
 if (!TOKEN || !CLIENT_ID) {
   console.error("❌ DISCORD_TOKEN veya DISCORD_CLIENT_ID eksik!");
   process.exit(1);
@@ -68,6 +76,14 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
+
+  // ═══ YETKİ KONTROLÜ - SADECE 4 ID ═══
+  if (!ALLOWED_IDS.includes(interaction.user.id)) {
+    return interaction.reply({
+      content: "🔒 **Yetkin yok!**\n\nBu komutları sadece yetkili kişiler kullanabilir.",
+      ephemeral: true
+    });
+  }
 
   try {
     if (commandName === 'script-yukle') {
