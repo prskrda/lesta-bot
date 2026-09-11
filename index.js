@@ -5,7 +5,6 @@ const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const WORKER_URL = process.env.WORKER_URL || "https://lesta-hub.prskrda.workers.dev";
 const PASSWORD = "lesta4ever437713";
 
-// ═══ YETKİLİ KİŞİLER ═══
 const ALLOWED_IDS = [
   "1433119562454401056",
   "1505609149487124480",
@@ -46,6 +45,12 @@ const commands = [
     .addStringOption(o => o.setName('key').setDescription('Silinecek key').setRequired(true)),
   new SlashCommandBuilder().setName('trial-olustur').setDescription('Trial key oluştur')
     .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true)),
+  new SlashCommandBuilder().setName('ban-userid').setDescription('Roblox UserId banla')
+    .addStringOption(o => o.setName('userid').setDescription('Roblox UserId').setRequired(true))
+    .addStringOption(o => o.setName('neden').setDescription('Ban nedeni').setRequired(false)),
+  new SlashCommandBuilder().setName('unban-userid').setDescription('Banı kaldır')
+    .addStringOption(o => o.setName('userid').setDescription('Roblox UserId').setRequired(true)),
+  new SlashCommandBuilder().setName('ban-listele').setDescription('Banlı kullanıcıları listele'),
   new SlashCommandBuilder().setName('istatistik').setDescription('Sistem istatistikleri'),
   new SlashCommandBuilder().setName('yardim').setDescription('Yardım menüsü')
 ].map(c => c.toJSON());
@@ -77,7 +82,6 @@ client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
 
-  // ═══ YETKİ KONTROLÜ - SADECE 4 ID ═══
   if (!ALLOWED_IDS.includes(interaction.user.id)) {
     return interaction.reply({
       content: "🔒 **Yetkin yok!**\n\nBu komutları sadece yetkili kişiler kullanabilir.",
@@ -215,11 +219,61 @@ client.on('interactionCreate', async interaction => {
       } else await interaction.editReply({ content: "❌ " + result.err });
     }
 
+    if (commandName === 'ban-userid') {
+      await interaction.deferReply();
+      const userId = interaction.options.getString('userid');
+      const reason = interaction.options.getString('neden') || "Belirtilmedi";
+      const result = await apiPost("/api/ban_user", { userId, reason, bannedBy: interaction.user.tag });
+      if (result.ok) {
+        const embed = new EmbedBuilder().setTitle("🚫 Kullanıcı Banlandı").setColor(0xf85149)
+          .addFields(
+            { name: "🆔 UserID", value: "`" + userId + "`", inline: true },
+            { name: "📝 Neden", value: reason, inline: true },
+            { name: "👤 Banlayan", value: interaction.user.tag, inline: true }
+          )
+          .setDescription("Bu Roblox hesabı artık **hiçbir scripti** çalıştıramaz.")
+          .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+      } else await interaction.editReply({ content: "❌ " + result.err });
+    }
+
+    if (commandName === 'unban-userid') {
+      await interaction.deferReply();
+      const userId = interaction.options.getString('userid');
+      const result = await apiPost("/api/unban_user", { userId });
+      if (result.ok) {
+        const embed = new EmbedBuilder().setTitle("✅ Ban Kaldırıldı").setColor(0x3fb950)
+          .addFields({ name: "🆔 UserID", value: "`" + userId + "`", inline: true })
+          .setDescription("Bu Roblox hesabı artık **tekrar script kullanabilir**.")
+          .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+      } else await interaction.editReply({ content: "❌ " + result.err });
+    }
+
+    if (commandName === 'ban-listele') {
+      await interaction.deferReply();
+      const data = await apiGet();
+      const banned = data.banned || {};
+      if (Object.keys(banned).length === 0) return await interaction.editReply({ content: "📭 Banlı kullanıcı yok." });
+      const embed = new EmbedBuilder().setTitle("🚫 Banlı Kullanıcılar").setColor(0xf85149)
+        .setDescription("Toplam: **" + Object.keys(banned).length + "** banlı hesap")
+        .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
+      Object.entries(banned).slice(0, 15).forEach(([userId, info]) => {
+        embed.addFields({
+          name: "🆔 " + userId,
+          value: "📝 " + (info.reason || "Belirtilmedi") + "\n👤 " + (info.bannedBy || "—") + "\n📅 " + new Date(info.bannedAt).toLocaleString("tr-TR"),
+          inline: false
+        });
+      });
+      await interaction.editReply({ embeds: [embed] });
+    }
+
     if (commandName === 'istatistik') {
       await interaction.deferReply();
       const data = await apiGet();
       const keys = Object.values(data.keys || {});
       const scripts = Object.values(data.scripts || {});
+      const banned = Object.values(data.banned || {});
       const now = Date.now();
       let active = 0, used = 0, expired = 0, trial = 0;
       keys.forEach(k => {
@@ -232,6 +286,7 @@ client.on('interactionCreate', async interaction => {
         .addFields(
           { name: "📦 Toplam Script", value: "**" + scripts.length + "**", inline: true },
           { name: "🔑 Toplam Key", value: "**" + keys.length + "**", inline: true },
+          { name: "🚫 Banlı", value: "**" + banned.length + "**", inline: true },
           { name: "✅ Aktif", value: "**" + active + "**", inline: true },
           { name: "❌ Kullanılmış", value: "**" + used + "**", inline: true },
           { name: "⏰ Süresi Dolmuş", value: "**" + expired + "**", inline: true },
@@ -248,6 +303,7 @@ client.on('interactionCreate', async interaction => {
           { name: "📦 Script Komutları", value: "`/script-yukle` - Yeni script yükle\n`/script-listele` - Scriptleri listele\n`/script-sil` - Script sil", inline: false },
           { name: "🔑 Key Komutları", value: "`/key-olustur` - Yeni key oluştur\n`/key-listele` - Keyleri listele\n`/key-sil` - Key sil", inline: false },
           { name: "🎁 Trial", value: "`/trial-olustur` - Trial key oluştur", inline: false },
+          { name: "🚫 Ban Komutları", value: "`/ban-userid` - Roblox hesabı banla\n`/unban-userid` - Banı kaldır\n`/ban-listele` - Banlıları listele", inline: false },
           { name: "📊 Diğer", value: "`/istatistik` - İstatistikler\n`/yardim` - Bu menü", inline: false }
         )
         .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
