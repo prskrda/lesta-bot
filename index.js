@@ -28,12 +28,20 @@ const client = new Client({
 });
 
 const commands = [
+  // ═══ SCRIPT KOMUTLARI ═══
   new SlashCommandBuilder().setName('script-yukle').setDescription('Yeni script yükle')
     .addStringOption(o => o.setName('isim').setDescription('Script adı').setRequired(true))
     .addStringOption(o => o.setName('kod').setDescription('Lua kodu').setRequired(true)),
   new SlashCommandBuilder().setName('script-listele').setDescription('Tüm scriptleri listele'),
   new SlashCommandBuilder().setName('script-sil').setDescription('Script sil')
     .addStringOption(o => o.setName('hash').setDescription('Script hash').setRequired(true)),
+  new SlashCommandBuilder().setName('script-goster').setDescription('Script kullanıcı kodunu göster (KEY-EKLE ile)')
+    .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true)),
+  new SlashCommandBuilder().setName('script-keyli-goster').setDescription('Script kodunu seçtiğin key ile göster')
+    .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true))
+    .addStringOption(o => o.setName('key').setDescription('Kullanılacak key').setRequired(true)),
+
+  // ═══ KEY KOMUTLARI ═══
   new SlashCommandBuilder().setName('key-olustur').setDescription('Yeni key oluştur')
     .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true))
     .addIntegerOption(o => o.setName('sure').setDescription('Süre').setRequired(true))
@@ -49,8 +57,12 @@ const commands = [
   new SlashCommandBuilder().setName('key-listele').setDescription('Tüm keyleri listele'),
   new SlashCommandBuilder().setName('key-sil').setDescription('Key sil')
     .addStringOption(o => o.setName('key').setDescription('Silinecek key').setRequired(true)),
+
+  // ═══ TRIAL ═══
   new SlashCommandBuilder().setName('trial-olustur').setDescription('Trial key oluştur')
     .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true)),
+
+  // ═══ DİĞER ═══
   new SlashCommandBuilder().setName('istatistik').setDescription('Sistem istatistikleri'),
   new SlashCommandBuilder().setName('yardim').setDescription('Yardım menüsü'),
 
@@ -78,6 +90,9 @@ const commands = [
 
 const UNIT_NAMES = { "1": "dakika", "60": "saat", "1440": "gün", "10080": "hafta", "43200": "ay" };
 
+// ═══════════════════════════════════════════════
+// API YARDIMCI
+// ═══════════════════════════════════════════════
 async function apiGet() {
   const r = await fetch(WORKER_URL + "/api/list");
   return await r.json();
@@ -101,6 +116,18 @@ function findScript(scripts, input) {
   return null;
 }
 
+function findKey(keys, input) {
+  for (const k of Object.keys(keys)) {
+    if (k === input || k.startsWith(input)) {
+      return k;
+    }
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════
+// KEY OLUŞTUR + DM
+// ═══════════════════════════════════════════════
 async function createKeyAndDM(client, userId, scriptHash, scriptName, sure, birim, not, kanal) {
   const result = await apiPost("/api/create_key", {
     scriptHash,
@@ -137,6 +164,9 @@ async function createKeyAndDM(client, userId, scriptHash, scriptName, sure, biri
   }
 }
 
+// ═══════════════════════════════════════════════
+// BOT HAZIR
+// ═══════════════════════════════════════════════
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} hazır!`);
   const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -146,11 +176,14 @@ client.once('ready', async () => {
   } catch (e) { console.error("❌ Komut kayıt hatası:", e); }
 });
 
+// ═══════════════════════════════════════════════
+// KOMUT HANDLER
+// ═══════════════════════════════════════════════
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
 
-  // ═══ YETKİ KONTROLÜ - TÜM KOMUTLAR ═══
+  // ═══ YETKİ KONTROLÜ ═══
   if (!ALLOWED_IDS.includes(interaction.user.id)) {
     return interaction.reply({
       content: "🔒 **Yetkin yok!**\n\nBu komutları sadece yetkili kişiler kullanabilir.",
@@ -167,12 +200,13 @@ client.on('interactionCreate', async interaction => {
       const result = await apiPost("/api/upload_script", { script, name });
       if (result.ok) {
         const luaUrl = WORKER_URL + "/scripts/" + result.hash + ".lua";
+        const userScript = 'script_key = "KEY-EKLE"\nloadstring(game:HttpGet("' + luaUrl + '"))()';
         const embed = new EmbedBuilder().setTitle("✅ Script Yüklendi").setColor(0x3fb950)
           .addFields(
             { name: "📦 İsim", value: name, inline: true },
             { name: "🔗 Hash", value: "`" + result.hash.substring(0, 24) + "...`", inline: false }
           )
-          .setDescription("**📋 Kullanıcı Scripti:**\n```lua\nscript_key = \"KEY_BURAYA\"\nloadstring(game:HttpGet(\"" + luaUrl + "\"))()\n```")
+          .setDescription("**📋 Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
           .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
       } else await interaction.editReply({ content: "❌ " + result.err });
@@ -201,6 +235,62 @@ client.on('interactionCreate', async interaction => {
       const result = await apiPost("/api/delete_script", { hash });
       if (result.ok) await interaction.editReply({ content: "🗑️ Script silindi." });
       else await interaction.editReply({ content: "❌ Silinemedi." });
+    }
+
+    // ═══ SCRIPT GÖSTER (KEY-EKLE) ═══
+    if (commandName === 'script-goster') {
+      await interaction.deferReply();
+      const scriptInput = interaction.options.getString('script');
+      const data = await apiGet();
+      const found = findScript(data.scripts || {}, scriptInput);
+      if (!found) return await interaction.editReply({ content: "❌ Script bulunamadı." });
+
+      const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
+      const userScript = 'script_key = "KEY-EKLE"\nloadstring(game:HttpGet("' + luaUrl + '"))()';
+
+      const embed = new EmbedBuilder()
+        .setTitle("📜 " + found.name)
+        .setColor(0x58a6ff)
+        .setDescription("**Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
+        .setFooter({ text: "LestaSec Cyber Engine v5.2 • Kullanıcı keyini KEY-EKLE yerine yazacak" })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+    }
+
+    // ═══ SCRIPT KEYLİ GÖSTER ═══
+    if (commandName === 'script-keyli-goster') {
+      await interaction.deferReply();
+      const scriptInput = interaction.options.getString('script');
+      const keyInput = interaction.options.getString('key');
+      const data = await apiGet();
+      const found = findScript(data.scripts || {}, scriptInput);
+      if (!found) return await interaction.editReply({ content: "❌ Script bulunamadı." });
+
+      const keys = data.keys || {};
+      const realKey = findKey(keys, keyInput);
+      if (!realKey) return await interaction.editReply({ content: "❌ Key bulunamadı." });
+
+      if (keys[realKey].scriptHash !== found.hash) {
+        return await interaction.editReply({ content: "❌ Bu key bu script'e ait değil!" });
+      }
+
+      const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
+      const userScript = 'script_key = "' + realKey + '"\nloadstring(game:HttpGet("' + luaUrl + '"))()';
+
+      const embed = new EmbedBuilder()
+        .setTitle("📜 " + found.name + " • 🔑 Keyli")
+        .setColor(0x3fb950)
+        .setDescription("**Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
+        .addFields(
+          { name: "🔑 Key", value: "`" + realKey + "`", inline: false },
+          { name: "📦 Script", value: found.name, inline: true },
+          { name: "📅 Bitiş", value: keys[realKey].isTrial ? "Sınırsız" : new Date(keys[realKey].expires).toLocaleString("tr-TR"), inline: true }
+        )
+        .setFooter({ text: "LestaSec Cyber Engine v5.2" })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
     }
 
     // ═══ KEY OLUŞTUR ═══
@@ -314,7 +404,7 @@ client.on('interactionCreate', async interaction => {
       const embed = new EmbedBuilder().setTitle("📖 Lesta Bot Komutları").setColor(0x58a6ff)
         .setDescription("LestaSec Cyber Engine v5.2 - Slash Komutları")
         .addFields(
-          { name: "📦 Script Komutları", value: "`/script-yukle` - Yeni script yükle\n`/script-listele` - Scriptleri listele\n`/script-sil` - Script sil", inline: false },
+          { name: "📦 Script Komutları", value: "`/script-yukle` - Yeni script yükle\n`/script-listele` - Scriptleri listele\n`/script-sil` - Script sil\n`/script-goster` - KEY-EKLE formatında göster\n`/script-keyli-goster` - Keyli format göster", inline: false },
           { name: "🔑 Key Komutları", value: "`/key-olustur` - Yeni key oluştur\n`/key-listele` - Keyleri listele\n`/key-sil` - Key sil", inline: false },
           { name: "🎁 Trial", value: "`/trial-olustur` - Trial key oluştur", inline: false },
           { name: "🎯 Drop", value: "`/key-drop` - Key drop başlat (sayı/buton)", inline: false },
@@ -340,7 +430,6 @@ client.on('interactionCreate', async interaction => {
       const found = findScript(data.scripts || {}, scriptInput);
       if (!found) return await interaction.editReply({ content: "❌ Script bulunamadı." });
 
-      // Kanal kontrolü
       if (!kanal.isTextBased || !kanal.isTextBased()) {
         return await interaction.editReply({ content: "❌ Geçersiz kanal." });
       }
@@ -349,7 +438,7 @@ client.on('interactionCreate', async interaction => {
 
       // ═══ SAYI YÖNTEMİ ═══
       if (yontem === 'sayi') {
-        const gizliSayi = Math.floor(Math.random() * 51); // 0-50
+        const gizliSayi = Math.floor(Math.random() * 51);
         const katilimcilar = new Map();
 
         const embed = new EmbedBuilder()
@@ -376,7 +465,6 @@ client.on('interactionCreate', async interaction => {
         const dropMsg = await kanal.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(katilBtn)] });
         await interaction.editReply({ content: `✅ Sayı drop başlatıldı!\n🎯 Gizli sayı: **${gizliSayi}** (kimseye gösterme)\n📢 Kanal: ${kanal}\n⏳ Süre: ${dropSuresi} sn` });
 
-        // Buton handler
         const katilHandler = async (btnInt) => {
           if (!btnInt.isButton()) return;
           if (btnInt.customId !== `drop_sayi_katil_${dropId}`) return;
@@ -394,7 +482,6 @@ client.on('interactionCreate', async interaction => {
           }
         };
 
-        // DM handler
         const dmHandler = async (message) => {
           if (message.author.bot) return;
           if (!message.guild) {
@@ -437,7 +524,6 @@ client.on('interactionCreate', async interaction => {
           }
 
           const kazananId = kazananlar[0];
-
           const keyResult = await createKeyAndDM(client, kazananId, found.hash, found.name, sure, birim, not, kanal);
 
           if (keyResult) {
@@ -521,7 +607,6 @@ client.on('interactionCreate', async interaction => {
             await kanal.send({ embeds: [kazananEmbed] });
           }
 
-          // 10 saniye sonra buton handler'ı kaldır
           setTimeout(() => client.off('interactionCreate', btnHandler), 10000);
         };
 
@@ -540,7 +625,9 @@ client.on('interactionCreate', async interaction => {
 
 client.login(TOKEN);
 
-// ═══ WEB SUNUCUSU (Render uyanık kalsın diye) ═══
+// ═══════════════════════════════════════════════
+// WEB SUNUCUSU (Render uyanık kalsın)
+// ═══════════════════════════════════════════════
 const http = require('http');
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
