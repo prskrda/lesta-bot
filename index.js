@@ -1,11 +1,15 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+// ═══════════════════════════════════════════════════════════════
+// LESTA BOT - CYBER ENGINE V5.2
+// Discord Bot - Key Drop Sistemi (Yeni)
+// ═══════════════════════════════════════════════════════════════
+
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const WORKER_URL = process.env.WORKER_URL || "https://lesta-hub.prskrda.workers.dev";
 const PASSWORD = "lesta4ever437713";
 
-// ═══ YETKİLİ KİŞİLER ═══
 const ALLOWED_IDS = [
   "1433119562454401056",
   "1505609149487124480",
@@ -27,8 +31,11 @@ const client = new Client({
   ]
 });
 
+// ═══════════════════════════════════════════════════════════════
+// SLASH KOMUTLAR
+// ═══════════════════════════════════════════════════════════════
+
 const commands = [
-  // ═══ SCRIPT KOMUTLARI ═══
   new SlashCommandBuilder().setName('script-yukle').setDescription('Yeni script yükle')
     .addStringOption(o => o.setName('isim').setDescription('Script adı').setRequired(true))
     .addStringOption(o => o.setName('kod').setDescription('Lua kodu').setRequired(true)),
@@ -40,8 +47,6 @@ const commands = [
   new SlashCommandBuilder().setName('script-keyli-goster').setDescription('Script kodunu seçtiğin key ile göster')
     .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true))
     .addStringOption(o => o.setName('key').setDescription('Kullanılacak key').setRequired(true)),
-
-  // ═══ KEY KOMUTLARI ═══
   new SlashCommandBuilder().setName('key-olustur').setDescription('Yeni key oluştur')
     .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true))
     .addIntegerOption(o => o.setName('sure').setDescription('Süre').setRequired(true))
@@ -57,16 +62,11 @@ const commands = [
   new SlashCommandBuilder().setName('key-listele').setDescription('Tüm keyleri listele'),
   new SlashCommandBuilder().setName('key-sil').setDescription('Key sil')
     .addStringOption(o => o.setName('key').setDescription('Silinecek key').setRequired(true)),
-
-  // ═══ TRIAL ═══
   new SlashCommandBuilder().setName('trial-olustur').setDescription('Trial key oluştur')
     .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true)),
-
-  // ═══ DİĞER ═══
   new SlashCommandBuilder().setName('istatistik').setDescription('Sistem istatistikleri'),
   new SlashCommandBuilder().setName('yardim').setDescription('Yardım menüsü'),
 
-  // ═══ KEY DROP ═══
   new SlashCommandBuilder().setName('key-drop').setDescription('Key drop başlat (sadece yetkililer)')
     .addStringOption(o => o.setName('script').setDescription('Script adı veya hash').setRequired(true))
     .addStringOption(o => o.setName('yontem').setDescription('Drop yöntemi').setRequired(true)
@@ -84,15 +84,25 @@ const commands = [
         { name: 'Ay', value: '43200' }
       ))
     .addChannelOption(o => o.setName('kanal').setDescription('Drop hangi kanala gitsin').setRequired(true))
-    .addIntegerOption(o => o.setName('drop_suresi').setDescription('Drop kaç saniye açık kalsın (varsayılan 60)').setRequired(false))
-    .addStringOption(o => o.setName('not').setDescription('Key notu').setRequired(false))
+    .addStringOption(o => o.setName('not').setDescription('Key notu').setRequired(false)),
+
+  new SlashCommandBuilder().setName('key-drop-iptal').setDescription('Aktif key drop\'u iptal et')
 ].map(c => c.toJSON());
 
 const UNIT_NAMES = { "1": "dakika", "60": "saat", "1440": "gün", "10080": "hafta", "43200": "ay" };
 
-// ═══════════════════════════════════════════════
-// API YARDIMCI
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// AKTİF DROPLAR
+// ═══════════════════════════════════════════════════════════════
+
+const activeDrops = new Map();
+// key: dropId
+// value: { guildId, channelId, method, secretNumber, winnerId, scriptHash, scriptName, sure, birim, not, messageId, startedAt, handler }
+
+// ═══════════════════════════════════════════════════════════════
+// API YARDIMCILAR
+// ═══════════════════════════════════════════════════════════════
+
 async function apiGet() {
   const r = await fetch(WORKER_URL + "/api/list");
   return await r.json();
@@ -118,22 +128,21 @@ function findScript(scripts, input) {
 
 function findKey(keys, input) {
   for (const k of Object.keys(keys)) {
-    if (k === input || k.startsWith(input)) {
-      return k;
-    }
+    if (k === input || k.startsWith(input)) return k;
   }
   return null;
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // KEY OLUŞTUR + DM
-// ═══════════════════════════════════════════════
-async function createKeyAndDM(client, userId, scriptHash, scriptName, sure, birim, not, kanal) {
+// ═══════════════════════════════════════════════════════════════
+
+async function createKeyAndDM(client, userId, scriptHash, scriptName, sure, birim, note, kanal) {
   const result = await apiPost("/api/create_key", {
     scriptHash,
     num: sure,
     unit: birim,
-    note: not || "Key Drop"
+    note: note || "Key Drop"
   });
 
   if (!result.ok) {
@@ -164,9 +173,10 @@ async function createKeyAndDM(client, userId, scriptHash, scriptName, sure, biri
   }
 }
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // BOT HAZIR
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+
 client.once('ready', async () => {
   console.log(`✅ ${client.user.tag} hazır!`);
   const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -176,14 +186,168 @@ client.once('ready', async () => {
   } catch (e) { console.error("❌ Komut kayıt hatası:", e); }
 });
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// MESAJ DİNLEYİCİ (SAYI TAHMİN İÇİN)
+// ═══════════════════════════════════════════════════════════════
+
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+  if (!message.guild) return;
+
+  // Aktif sayı drop'ları kontrol et
+  for (const [dropId, drop] of activeDrops.entries()) {
+    if (drop.method !== 'sayi') continue;
+    if (drop.winnerId) continue;
+    if (message.channel.id !== drop.channelId) continue;
+
+    const num = parseInt(message.content.trim());
+    if (isNaN(num)) continue;
+
+    if (num === drop.secretNumber) {
+      // KAZANAN!
+      drop.winnerId = message.author.id;
+
+      // Drop mesajını güncelle
+      await updateDropMessage(drop, message.author);
+
+      // Key oluştur + DM
+      const channel = await client.channels.fetch(drop.channelId).catch(() => null);
+      const keyResult = await createKeyAndDM(
+        client,
+        message.author.id,
+        drop.scriptHash,
+        drop.scriptName,
+        drop.sure,
+        drop.birim,
+        drop.note,
+        channel
+      );
+
+      if (keyResult && channel) {
+        // Kazanma mesajı
+        const winEmbed = new EmbedBuilder()
+          .setTitle("🎉 KAZANAN!")
+          .setColor(0x3fb950)
+          .setDescription(
+            `🏆 <@${message.author.id}> sayıyı doğru bildi!\n\n` +
+            `**Doğru Sayı:** ${drop.secretNumber}\n` +
+            `**Script:** ${drop.scriptName}\n\n` +
+            `${keyResult.dmOk ? "📬 DM kutusuna script gönderildi!" : "⚠️ DM kapalıydı, key kanala yazıldı."}`
+          )
+          .setFooter({ text: "LestaSec Cyber Engine v5.2" })
+          .setTimestamp();
+        await channel.send({ embeds: [winEmbed] }).catch(() => {});
+      }
+
+      activeDrops.delete(dropId);
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// DROP MESAJINI GÜNCELLE
+// ═══════════════════════════════════════════════════════════════
+
+async function updateDropMessage(drop, winner) {
+  try {
+    const channel = await client.channels.fetch(drop.channelId);
+    const message = await channel.messages.fetch(drop.messageId);
+
+    let desc = "";
+    if (drop.method === 'sayi') {
+      desc =
+        `**Script:** ${drop.scriptName}\n` +
+        `**Key Süresi:** ${drop.sure} ${UNIT_NAMES[drop.birim]}\n\n` +
+        `🔒 **KAZANILDI! (${winner.username})**\n\n` +
+        `**Doğru Sayı:** ${drop.secretNumber}`;
+    } else if (drop.method === 'buton') {
+      desc =
+        `**Script:** ${drop.scriptName}\n` +
+        `**Key Süresi:** ${drop.sure} ${UNIT_NAMES[drop.birim]}\n\n` +
+        `🔒 **KAZANILDI! (${winner.username})**`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(drop.method === 'sayi' ? "🎯 KEY DROP - SAYI TAHMİN" : "⚡ KEY DROP - İLK BASAN KAZANIR")
+      .setColor(drop.method === 'sayi' ? 0xa855f7 : 0xf85149)
+      .setDescription(desc)
+      .setFooter({ text: "LestaSec Cyber Engine v5.2" })
+      .setTimestamp();
+
+    let components = [];
+    if (drop.method === 'buton') {
+      const lockedBtn = new ButtonBuilder()
+        .setCustomId(`drop_locked_${drop.messageId}`)
+        .setLabel(`🔒 KAZANILDI! (${winner.username})`)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true);
+      components = [new ActionRowBuilder().addComponents(lockedBtn)];
+    }
+
+    await message.edit({ embeds: [embed], components });
+  } catch (e) {
+    console.error("Drop mesajı güncellenemedi:", e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // KOMUT HANDLER
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+
 client.on('interactionCreate', async interaction => {
+  // Buton tıklamaları
+  if (interaction.isButton()) {
+    for (const [dropId, drop] of activeDrops.entries()) {
+      if (drop.method !== 'buton') continue;
+      if (drop.winnerId) {
+        return interaction.reply({ content: "😔 Çok geç! Başkası kaptı.", ephemeral: true });
+      }
+      if (interaction.customId !== `drop_buton_${dropId}`) continue;
+
+      // KAZANAN!
+      drop.winnerId = interaction.user.id;
+
+      await updateDropMessage(drop, interaction.user);
+
+      await interaction.reply({ content: "🎉 KAZANDIN! Key DM'den gönderiliyor...", ephemeral: true });
+
+      const channel = await client.channels.fetch(drop.channelId).catch(() => null);
+      const keyResult = await createKeyAndDM(
+        client,
+        interaction.user.id,
+        drop.scriptHash,
+        drop.scriptName,
+        drop.sure,
+        drop.birim,
+        drop.note,
+        channel
+      );
+
+      if (keyResult && channel) {
+        const winEmbed = new EmbedBuilder()
+          .setTitle("⚡ KAZANAN!")
+          .setColor(0x3fb950)
+          .setDescription(
+            `🏆 <@${interaction.user.id}> butona ilk bastı!\n\n` +
+            `**Script:** ${drop.scriptName}\n` +
+            `**Ödül:** ${drop.sure} ${UNIT_NAMES[drop.birim]} key\n\n` +
+            `${keyResult.dmOk ? "📬 DM kutusuna script gönderildi!" : "⚠️ DM kapalıydı, key kanala yazıldı."}`
+          )
+          .setFooter({ text: "LestaSec Cyber Engine v5.2" })
+          .setTimestamp();
+        await channel.send({ embeds: [winEmbed] }).catch(() => {});
+      }
+
+      activeDrops.delete(dropId);
+      return;
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
 
-  // ═══ YETKİ KONTROLÜ ═══
+  // YETKİ KONTROLÜ
   if (!ALLOWED_IDS.includes(interaction.user.id)) {
     return interaction.reply({
       content: "🔒 **Yetkin yok!**\n\nBu komutları sadece yetkili kişiler kullanabilir.",
@@ -206,7 +370,7 @@ client.on('interactionCreate', async interaction => {
             { name: "📦 İsim", value: name, inline: true },
             { name: "🔗 Hash", value: "`" + result.hash.substring(0, 24) + "...`", inline: false }
           )
-          .setDescription("**📋 Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
+          .setDescription("**📋 Kullanıcı Scripti:**\n```lua\n" + userScript + "\n```")
           .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
       } else await interaction.editReply({ content: "❌ " + result.err });
@@ -237,24 +401,18 @@ client.on('interactionCreate', async interaction => {
       else await interaction.editReply({ content: "❌ Silinemedi." });
     }
 
-    // ═══ SCRIPT GÖSTER (KEY-EKLE) ═══
+    // ═══ SCRIPT GÖSTER ═══
     if (commandName === 'script-goster') {
       await interaction.deferReply();
       const scriptInput = interaction.options.getString('script');
       const data = await apiGet();
       const found = findScript(data.scripts || {}, scriptInput);
       if (!found) return await interaction.editReply({ content: "❌ Script bulunamadı." });
-
       const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
       const userScript = 'script_key = "KEY-EKLE"\nloadstring(game:HttpGet("' + luaUrl + '"))()';
-
-      const embed = new EmbedBuilder()
-        .setTitle("📜 " + found.name)
-        .setColor(0x58a6ff)
+      const embed = new EmbedBuilder().setTitle("📜 " + found.name).setColor(0x58a6ff)
         .setDescription("**Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
-        .setFooter({ text: "LestaSec Cyber Engine v5.2 • Kullanıcı keyini KEY-EKLE yerine yazacak" })
-        .setTimestamp();
-
+        .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
       await interaction.editReply({ embeds: [embed] });
     }
 
@@ -266,30 +424,20 @@ client.on('interactionCreate', async interaction => {
       const data = await apiGet();
       const found = findScript(data.scripts || {}, scriptInput);
       if (!found) return await interaction.editReply({ content: "❌ Script bulunamadı." });
-
       const keys = data.keys || {};
       const realKey = findKey(keys, keyInput);
       if (!realKey) return await interaction.editReply({ content: "❌ Key bulunamadı." });
-
-      if (keys[realKey].scriptHash !== found.hash) {
-        return await interaction.editReply({ content: "❌ Bu key bu script'e ait değil!" });
-      }
-
+      if (keys[realKey].scriptHash !== found.hash) return await interaction.editReply({ content: "❌ Bu key bu script'e ait değil!" });
       const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
       const userScript = 'script_key = "' + realKey + '"\nloadstring(game:HttpGet("' + luaUrl + '"))()';
-
-      const embed = new EmbedBuilder()
-        .setTitle("📜 " + found.name + " • 🔑 Keyli")
-        .setColor(0x3fb950)
+      const embed = new EmbedBuilder().setTitle("📜 " + found.name + " • 🔑 Keyli").setColor(0x3fb950)
         .setDescription("**Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
         .addFields(
           { name: "🔑 Key", value: "`" + realKey + "`", inline: false },
           { name: "📦 Script", value: found.name, inline: true },
           { name: "📅 Bitiş", value: keys[realKey].isTrial ? "Sınırsız" : new Date(keys[realKey].expires).toLocaleString("tr-TR"), inline: true }
         )
-        .setFooter({ text: "LestaSec Cyber Engine v5.2" })
-        .setTimestamp();
-
+        .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
       await interaction.editReply({ embeds: [embed] });
     }
 
@@ -407,23 +555,30 @@ client.on('interactionCreate', async interaction => {
           { name: "📦 Script Komutları", value: "`/script-yukle` - Yeni script yükle\n`/script-listele` - Scriptleri listele\n`/script-sil` - Script sil\n`/script-goster` - KEY-EKLE formatında göster\n`/script-keyli-goster` - Keyli format göster", inline: false },
           { name: "🔑 Key Komutları", value: "`/key-olustur` - Yeni key oluştur\n`/key-listele` - Keyleri listele\n`/key-sil` - Key sil", inline: false },
           { name: "🎁 Trial", value: "`/trial-olustur` - Trial key oluştur", inline: false },
-          { name: "🎯 Drop", value: "`/key-drop` - Key drop başlat (sayı/buton)", inline: false },
+          { name: "🎯 Drop", value: "`/key-drop` - Key drop başlat (sayı/buton)\n`/key-drop-iptal` - Aktif drop'u iptal et", inline: false },
           { name: "📊 Diğer", value: "`/istatistik` - İstatistikler\n`/yardim` - Bu menü", inline: false }
         )
         .setFooter({ text: "LestaSec Cyber Engine v5.2" }).setTimestamp();
       await interaction.reply({ embeds: [embed] });
     }
 
-    // ═══ KEY DROP ═══
+    // ═══════════════════════════════════════════════════════
+    // KEY DROP
+    // ═══════════════════════════════════════════════════════
     if (commandName === 'key-drop') {
       await interaction.deferReply({ ephemeral: true });
+
+      // Aynı sunucuda aktif drop var mı?
+      const existing = Array.from(activeDrops.values()).find(d => d.guildId === interaction.guildId);
+      if (existing) {
+        return await interaction.editReply({ content: "⚠️ Bu sunucuda zaten aktif bir drop var! Önce onu iptal et: `/key-drop-iptal`" });
+      }
 
       const scriptInput = interaction.options.getString('script');
       const yontem = interaction.options.getString('yontem');
       const sure = interaction.options.getInteger('sure');
       const birim = interaction.options.getString('birim');
       const kanal = interaction.options.getChannel('kanal');
-      const dropSuresi = interaction.options.getInteger('drop_suresi') || 60;
       const not = interaction.options.getString('not') || "Key Drop";
 
       const data = await apiGet();
@@ -438,117 +593,48 @@ client.on('interactionCreate', async interaction => {
 
       // ═══ SAYI YÖNTEMİ ═══
       if (yontem === 'sayi') {
-        const gizliSayi = Math.floor(Math.random() * 51);
-        const katilimcilar = new Map();
+        const secretNumber = Math.floor(Math.random() * 51); // 0-50
 
         const embed = new EmbedBuilder()
           .setTitle("🎯 KEY DROP - SAYI TAHMİN")
           .setColor(0xa855f7)
           .setDescription(
             `**Script:** ${found.name}\n` +
-            `**Key Süresi:** ${sure} ${UNIT_NAMES[birim]}\n` +
-            `**Drop Süresi:** ${dropSuresi} saniye\n\n` +
+            `**Key Süresi:** ${sure} ${UNIT_NAMES[birim]}\n\n` +
             `**Nasıl oynanır?**\n` +
-            `1️⃣ Aşağıdaki **KATIL** butonuna bas\n` +
-            `2️⃣ Bot sana DM'den 0-50 arası tahmin soracak\n` +
-            `3️⃣ Süre bitince **doğru tahmin eden** kazanır!\n\n` +
-            `⏳ **Kalan süre: ${dropSuresi} saniye**`
+            `1️⃣ 0 ile 50 arasında bir sayı tuttum\n` +
+            `2️⃣ Bu kanala tahminini yaz\n` +
+            `3️⃣ **Doğru bilen ilk kişi kazanır!**\n\n` +
+            `⚡ İstediğin kadar tahmin yapabilirsin!`
           )
           .setFooter({ text: "LestaSec Cyber Engine v5.2" })
           .setTimestamp();
 
-        const katilBtn = new ButtonBuilder()
-          .setCustomId(`drop_sayi_katil_${dropId}`)
-          .setLabel("🎯 KATIL")
-          .setStyle(ButtonStyle.Primary);
+        const dropMsg = await kanal.send({ embeds: [embed] });
 
-        const dropMsg = await kanal.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(katilBtn)] });
-        await interaction.editReply({ content: `✅ Sayı drop başlatıldı!\n🎯 Gizli sayı: **${gizliSayi}** (kimseye gösterme)\n📢 Kanal: ${kanal}\n⏳ Süre: ${dropSuresi} sn` });
+        // Drop'u kaydet
+        activeDrops.set(dropId, {
+          guildId: interaction.guildId,
+          channelId: kanal.id,
+          messageId: dropMsg.id,
+          method: 'sayi',
+          secretNumber,
+          winnerId: null,
+          scriptHash: found.hash,
+          scriptName: found.name,
+          sure,
+          birim,
+          note: not,
+          startedAt: Date.now()
+        });
 
-        const katilHandler = async (btnInt) => {
-          if (!btnInt.isButton()) return;
-          if (btnInt.customId !== `drop_sayi_katil_${dropId}`) return;
-          if (katilimcilar.has(btnInt.user.id)) {
-            return btnInt.reply({ content: "⚠️ Zaten katıldın! DM'den tahminini yaz.", ephemeral: true });
-          }
-          katilimcilar.set(btnInt.user.id, null);
-          try {
-            const dm = await btnInt.user.createDM();
-            await dm.send(`🎯 **Key Drop - Sayı Tahmin**\n\n0 ile 50 arasında bir sayı yaz ve gönder.\n⏳ Süre: ${dropSuresi} saniye\n📦 Script: **${found.name}**`);
-            await btnInt.reply({ content: "✅ Katıldın! Şimdi DM'den 0-50 arası tahminini yaz.", ephemeral: true });
-          } catch (e) {
-            katilimcilar.delete(btnInt.user.id);
-            await btnInt.reply({ content: "❌ DM'in kapalı olduğu için tahminini alamıyorum!", ephemeral: true });
-          }
-        };
-
-        const dmHandler = async (message) => {
-          if (message.author.bot) return;
-          if (!message.guild) {
-            if (!katilimcilar.has(message.author.id)) return;
-            const sayi = parseInt(message.content.trim());
-            if (isNaN(sayi) || sayi < 0 || sayi > 50) {
-              return message.reply("❌ Lütfen 0-50 arası geçerli bir sayı yaz.").catch(() => {});
-            }
-            katilimcilar.set(message.author.id, sayi);
-            await message.reply(`✅ Tahminin alındı: **${sayi}**`).catch(() => {});
-          }
-        };
-
-        client.on('interactionCreate', katilHandler);
-        client.on('messageCreate', dmHandler);
-
-        setTimeout(async () => {
-          client.off('interactionCreate', katilHandler);
-          client.off('messageCreate', dmHandler);
-
-          const disabledBtn = new ButtonBuilder()
-            .setCustomId(`drop_sayi_katil_${dropId}`)
-            .setLabel("⏰ BİTTİ")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true);
-          await dropMsg.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] }).catch(() => {});
-
-          const kazananlar = [];
-          for (const [userId, tahmin] of katilimcilar.entries()) {
-            if (tahmin === gizliSayi) kazananlar.push(userId);
-          }
-
-          if (kazananlar.length === 0) {
-            return kanal.send({
-              embeds: [new EmbedBuilder()
-                .setTitle("😔 Kimse Bilemedi!")
-                .setColor(0xf85149)
-                .setDescription(`Gizli sayı: **${gizliSayi}**\nKatılımcı: **${katilimcilar.size}** kişi\n\nKimse doğru tahmin edemedi.`)]
-            });
-          }
-
-          const kazananId = kazananlar[0];
-          const keyResult = await createKeyAndDM(client, kazananId, found.hash, found.name, sure, birim, not, kanal);
-
-          if (keyResult) {
-            const kazananEmbed = new EmbedBuilder()
-              .setTitle("🎉 KAZANAN!")
-              .setColor(0x3fb950)
-              .setDescription(
-                `🏆 <@${kazananId}> doğru tahmin etti!\n\n` +
-                `**Gizli Sayı:** ${gizliSayi}\n` +
-                `**Script:** ${found.name}\n` +
-                `**Katılımcı:** ${katilimcilar.size} kişi\n\n` +
-                `${keyResult.dmOk ? "📬 Key DM'den gönderildi!" : "⚠️ DM kapalıydı, key kanala yazıldı."}`
-              )
-              .setFooter({ text: "LestaSec Cyber Engine v5.2" })
-              .setTimestamp();
-            await kanal.send({ embeds: [kazananEmbed] });
-          }
-        }, dropSuresi * 1000);
+        await interaction.editReply({
+          content: `✅ **Sayı Drop Başlatıldı!**\n\n🎯 Gizli Sayı: **${secretNumber}** (kimseye söyleme!)\n📢 Kanal: ${kanal}\n⚡ Kimse bulamazsa süresiz açık kalır. İptal: \`/key-drop-iptal\``
+        });
       }
 
       // ═══ BUTON YÖNTEMİ ═══
       if (yontem === 'buton') {
-        let kilitli = false;
-        let kazananId = null;
-
         const embed = new EmbedBuilder()
           .setTitle("⚡ KEY DROP - İLK BASAN KAZANIR")
           .setColor(0xf85149)
@@ -563,55 +649,67 @@ client.on('interactionCreate', async interaction => {
           .setTimestamp();
 
         const kapBtn = new ButtonBuilder()
-          .setCustomId(`drop_buton_kap_${dropId}`)
+          .setCustomId(`drop_buton_${dropId}`)
           .setLabel("⚡ KAPIYORUM!")
           .setStyle(ButtonStyle.Danger);
 
         const dropMsg = await kanal.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(kapBtn)] });
-        await interaction.editReply({ content: `✅ Buton drop başlatıldı!\n📢 Kanal: ${kanal}` });
 
-        const btnHandler = async (btnInt) => {
-          if (!btnInt.isButton()) return;
-          if (btnInt.customId !== `drop_buton_kap_${dropId}`) return;
+        activeDrops.set(dropId, {
+          guildId: interaction.guildId,
+          channelId: kanal.id,
+          messageId: dropMsg.id,
+          method: 'buton',
+          secretNumber: null,
+          winnerId: null,
+          scriptHash: found.hash,
+          scriptName: found.name,
+          sure,
+          birim,
+          note: not,
+          startedAt: Date.now()
+        });
 
-          if (kilitli) {
-            return btnInt.reply({ content: "😔 Çok geç! Başkası kaptı.", ephemeral: true });
-          }
-
-          kilitli = true;
-          kazananId = btnInt.user.id;
-
-          const disabledBtn = new ButtonBuilder()
-            .setCustomId(`drop_buton_kap_${dropId}`)
-            .setLabel("🔒 KİLİTLENDİ")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true);
-          await dropMsg.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] }).catch(() => {});
-
-          await btnInt.reply({ content: "🎉 KAZANDIN! Key DM'den gönderiliyor...", ephemeral: true });
-
-          const keyResult = await createKeyAndDM(client, kazananId, found.hash, found.name, sure, birim, not, kanal);
-
-          if (keyResult) {
-            const kazananEmbed = new EmbedBuilder()
-              .setTitle("⚡ KAZANAN!")
-              .setColor(0x3fb950)
-              .setDescription(
-                `🏆 <@${kazananId}> butona ilk bastı!\n\n` +
-                `**Script:** ${found.name}\n` +
-                `**Ödül:** ${sure} ${UNIT_NAMES[birim]} key\n\n` +
-                `${keyResult.dmOk ? "📬 Key DM'den gönderildi!" : "⚠️ DM kapalıydı, key kanala yazıldı."}`
-              )
-              .setFooter({ text: "LestaSec Cyber Engine v5.2" })
-              .setTimestamp();
-            await kanal.send({ embeds: [kazananEmbed] });
-          }
-
-          setTimeout(() => client.off('interactionCreate', btnHandler), 10000);
-        };
-
-        client.on('interactionCreate', btnHandler);
+        await interaction.editReply({ content: `✅ **Buton Drop Başlatıldı!**\n\n📢 Kanal: ${kanal}` });
       }
+    }
+
+    // ═══ KEY DROP İPTAL ═══
+    if (commandName === 'key-drop-iptal') {
+      await interaction.deferReply({ ephemeral: true });
+
+      const drops = Array.from(activeDrops.entries()).filter(([id, d]) => d.guildId === interaction.guildId);
+      if (drops.length === 0) {
+        return await interaction.editReply({ content: "📭 Bu sunucuda aktif drop yok." });
+      }
+
+      for (const [dropId, drop] of drops) {
+        try {
+          const channel = await client.channels.fetch(drop.channelId);
+          const message = await channel.messages.fetch(drop.messageId);
+          const cancelledEmbed = new EmbedBuilder()
+            .setTitle("🚫 DROP İPTAL EDİLDİ")
+            .setColor(0xf85149)
+            .setDescription(`**Script:** ${drop.scriptName}\n\nYetkili tarafından iptal edildi.`)
+            .setFooter({ text: "LestaSec Cyber Engine v5.2" })
+            .setTimestamp();
+
+          let components = [];
+          if (drop.method === 'buton') {
+            const cancelledBtn = new ButtonBuilder()
+              .setCustomId(`drop_cancelled_${dropId}`)
+              .setLabel("🚫 İPTAL EDİLDİ")
+              .setStyle(ButtonStyle.Secondary)
+              .setDisabled(true);
+            components = [new ActionRowBuilder().addComponents(cancelledBtn)];
+          }
+
+          await message.edit({ embeds: [cancelledEmbed], components });
+        } catch(e) {}
+        activeDrops.delete(dropId);
+      }
+
+      await interaction.editReply({ content: `✅ ${drops.length} drop iptal edildi.` });
     }
 
   } catch (err) {
@@ -625,9 +723,9 @@ client.on('interactionCreate', async interaction => {
 
 client.login(TOKEN);
 
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // WEB SUNUCUSU (Render uyanık kalsın)
-// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 const http = require('http');
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
