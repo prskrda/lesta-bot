@@ -1,15 +1,17 @@
 // ═══════════════════════════════════════════════════════════════
 // LESTA BOT - CYBER ENGINE V5.3
-// Tek Dosya - TÜM KOMUTLAR ALLOWED_IDS'E ÖZEL
+// Full Version - TÜM KOMUTLAR ALLOWED_IDS'E ÖZEL
 // ═══════════════════════════════════════════════════════════════
 
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { newCommands, handleNewCommand, handleNewButton } = require('./commands.js');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const WORKER_URL = process.env.WORKER_URL || "https://lesta-hub.prskrda.workers.dev";
 const PASSWORD = "lesta4ever437713";
 
+// ═══ YETKİLİ KİŞİLER ═══
 const ALLOWED_IDS = [
   "1433119562454401056",
   "1505609149487124480",
@@ -34,16 +36,7 @@ const client = new Client({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// GEÇİCİ VERİ DEPOLAMA
-// ═══════════════════════════════════════════════════════════════
-
-const notes = new Map();
-const buttonRoles = new Map();
-const activeDrops = new Map();
-const dropHistory = [];
-
-// ═══════════════════════════════════════════════════════════════
-// SLASH KOMUTLAR
+// SLASH KOMUTLAR (Lesta + commands.js'den gelen yeni komutlar)
 // ═══════════════════════════════════════════════════════════════
 
 const commands = [
@@ -171,59 +164,6 @@ const commands = [
   new SlashCommandBuilder().setName('key-drop-istatistik').setDescription('Drop istatistikleri'),
   new SlashCommandBuilder().setName('key-drop-gecmis').setDescription('Drop geçmişi'),
 
-  // ═══ MODERASYON (12) ═══
-  new SlashCommandBuilder().setName('kick').setDescription('Kullanıcıyı sunucudan at')
-    .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(true))
-    .addStringOption(o => o.setName('sebep').setDescription('Sebep').setRequired(false)),
-  new SlashCommandBuilder().setName('mod-ban').setDescription('Kullanıcıyı sunucudan banla')
-    .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(true))
-    .addStringOption(o => o.setName('sebep').setDescription('Sebep').setRequired(false))
-    .addIntegerOption(o => o.setName('gun').setDescription('Mesaj geçmişi sil (gün)').setRequired(false)),
-  new SlashCommandBuilder().setName('mod-unban').setDescription('Ban kaldır')
-    .addStringOption(o => o.setName('userid').setDescription('Discord UserId').setRequired(true)),
-  new SlashCommandBuilder().setName('mute').setDescription('Kullanıcıyı sustur (timeout)')
-    .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(true))
-    .addIntegerOption(o => o.setName('dakika').setDescription('Kaç dakika').setRequired(true))
-    .addStringOption(o => o.setName('sebep').setDescription('Sebep').setRequired(false)),
-  new SlashCommandBuilder().setName('unmute').setDescription('Susturmayı kaldır')
-    .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(true)),
-  new SlashCommandBuilder().setName('clear').setDescription('Mesajları temizle')
-    .addIntegerOption(o => o.setName('miktar').setDescription('Kaç mesaj (1-100)').setRequired(true)),
-  new SlashCommandBuilder().setName('slowmode').setDescription('Kanal yavaş modu ayarla')
-    .addIntegerOption(o => o.setName('saniye').setDescription('Saniye (0=kapat)').setRequired(true)),
-  new SlashCommandBuilder().setName('lock').setDescription('Kanalı kilitle'),
-  new SlashCommandBuilder().setName('unlock').setDescription('Kanalın kilidini aç'),
-  new SlashCommandBuilder().setName('addrole').setDescription('Kullanıcıya rol ver')
-    .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(true))
-    .addRoleOption(o => o.setName('rol').setDescription('Rol').setRequired(true)),
-  new SlashCommandBuilder().setName('removerole').setDescription('Kullanıcıdan rol al')
-    .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(true))
-    .addRoleOption(o => o.setName('rol').setDescription('Rol').setRequired(true)),
-  new SlashCommandBuilder().setName('nickname').setDescription('Kullanıcının takma adını değiştir')
-    .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(true))
-    .addStringOption(o => o.setName('yeni_isim').setDescription('Yeni isim').setRequired(true)),
-
-  // ═══ BUTON ROL (3) ═══
-  new SlashCommandBuilder().setName('buton-rol-olustur').setDescription('Buton rol menüsü oluştur')
-    .addStringOption(o => o.setName('baslik').setDescription('Panel başlığı').setRequired(true))
-    .addRoleOption(o => o.setName('rol1').setDescription('1. rol').setRequired(true))
-    .addRoleOption(o => o.setName('rol2').setDescription('2. rol').setRequired(false))
-    .addRoleOption(o => o.setName('rol3').setDescription('3. rol').setRequired(false))
-    .addRoleOption(o => o.setName('rol4').setDescription('4. rol').setRequired(false))
-    .addRoleOption(o => o.setName('rol5').setDescription('5. rol').setRequired(false)),
-  new SlashCommandBuilder().setName('buton-rol-sil').setDescription('Buton rol mesajını sil')
-    .addStringOption(o => o.setName('messageid').setDescription('Mesaj ID').setRequired(true)),
-  new SlashCommandBuilder().setName('buton-rol-listele').setDescription('Buton rolleri listele'),
-
-  // ═══ NOT (5) ═══
-  new SlashCommandBuilder().setName('not-ekle').setDescription('Kişisel not ekle')
-    .addStringOption(o => o.setName('not').setDescription('Not içeriği').setRequired(true)),
-  new SlashCommandBuilder().setName('not-listele').setDescription('Notlarını listele'),
-  new SlashCommandBuilder().setName('not-sil').setDescription('Not sil')
-    .addIntegerOption(o => o.setName('index').setDescription('Not numarası').setRequired(true)),
-  new SlashCommandBuilder().setName('not-temizle').setDescription('Tüm notlarını temizle'),
-  new SlashCommandBuilder().setName('not-bilgi').setDescription('Not istatistikleri'),
-
   // ═══ DİĞER (8) ═══
   new SlashCommandBuilder().setName('trial-olustur').setDescription('Trial key oluştur')
     .addStringOption(o => o.setName('script').setDescription('Script').setRequired(true)),
@@ -234,10 +174,20 @@ const commands = [
   new SlashCommandBuilder().setName('kullanici-bilgi').setDescription('Kullanıcı bilgisi')
     .addUserOption(o => o.setName('kullanici').setDescription('Kullanıcı').setRequired(false)),
   new SlashCommandBuilder().setName('sunucu-bilgi').setDescription('Sunucu bilgisi'),
-  new SlashCommandBuilder().setName('komut-sayisi').setDescription('Toplam komut sayısı')
+  new SlashCommandBuilder().setName('komut-sayisi').setDescription('Toplam komut sayısı'),
+
+  // ═══ COMMANDS.JS'DEN YENİ KOMUTLAR ═══
+  ...newCommands
 ].map(c => c.toJSON());
 
 const UNIT_NAMES = { "1": "dakika", "60": "saat", "1440": "gün", "10080": "hafta", "43200": "ay" };
+
+// ═══════════════════════════════════════════════════════════════
+// AKTİF DROPLAR
+// ═══════════════════════════════════════════════════════════════
+
+const activeDrops = new Map();
+const dropHistory = [];
 
 // ═══════════════════════════════════════════════════════════════
 // API YARDIMCILAR
@@ -280,7 +230,9 @@ async function createKeyAndDM(client, userId, scriptHash, scriptName, sure, biri
     return null;
   }
   const luaUrl = WORKER_URL + "/scripts/" + scriptHash + ".lua";
-  const dmEmbed = new EmbedBuilder().setTitle("🏆 Key Drop Kazandın!").setColor(0x3fb950)
+  const dmEmbed = new EmbedBuilder()
+    .setTitle("🏆 Key Drop Kazandın!")
+    .setColor(0x3fb950)
     .addFields(
       { name: "📦 Script", value: scriptName, inline: true },
       { name: "⏱️ Süre", value: `${sure} ${UNIT_NAMES[birim]}`, inline: true },
@@ -318,12 +270,15 @@ client.once('ready', async () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (!message.guild) return;
+
   for (const [dropId, drop] of activeDrops.entries()) {
     if (drop.method !== 'sayi') continue;
     if (drop.winnerId) continue;
     if (message.channel.id !== drop.channelId) continue;
+
     const num = parseInt(message.content.trim());
     if (isNaN(num)) continue;
+
     if (num === drop.secretNumber) {
       drop.winnerId = message.author.id;
       dropHistory.unshift({ scriptName: drop.scriptName, winnerId: message.author.id, winnerName: message.author.username, method: 'sayi', secretNumber: drop.secretNumber, wonAt: Date.now() });
@@ -371,24 +326,14 @@ async function updateDropMessage(drop, winner) {
 // ═══════════════════════════════════════════════════════════════
 
 client.on('interactionCreate', async interaction => {
-  // ═══ BUTON ROL ═══
-  if (interaction.isButton() && interaction.customId.startsWith('btnrole_')) {
-    const roleId = interaction.customId.replace('btnrole_', '');
-    const member = interaction.member;
-    try {
-      const role = interaction.guild.roles.cache.get(roleId);
-      if (!role) return interaction.reply({ content: "❌ Rol bulunamadı.", ephemeral: true });
-      if (member.roles.cache.has(roleId)) {
-        await member.roles.remove(roleId);
-        await interaction.reply({ content: `✅ **${role.name}** rolü kaldırıldı.`, ephemeral: true });
-      } else {
-        await member.roles.add(roleId);
-        await interaction.reply({ content: `✅ **${role.name}** rolü verildi!`, ephemeral: true });
-      }
-    } catch (e) {
-      await interaction.reply({ content: "❌ Rol değiştirilemedi.", ephemeral: true });
-    }
-    return;
+  // ═══ YENİ KOMUTLAR (commands.js) ═══
+  if (interaction.isButton()) {
+    const handled = await handleNewButton(interaction);
+    if (handled) return;
+  }
+  if (interaction.isChatInputCommand()) {
+    const handled = await handleNewCommand(interaction);
+    if (handled) return;
   }
 
   // ═══ DROP BUTONU ═══
@@ -421,11 +366,14 @@ client.on('interactionCreate', async interaction => {
 
   // ═══ YETKİ KONTROLÜ — TÜM KOMUTLAR ═══
   if (!ALLOWED_IDS.includes(interaction.user.id)) {
-    return interaction.reply({ content: "🔒 **Yetkin yok!**\n\nBu komutları sadece yetkili kişiler kullanabilir.", ephemeral: true });
+    return interaction.reply({
+      content: "🔒 **Yetkin yok!**\n\nBu komutları sadece yetkili kişiler kullanabilir.",
+      ephemeral: true
+    });
   }
 
   try {
-    // ═══ SCRIPT ═══
+    // ═══ SCRIPT KOMUTLARI ═══
     if (commandName === 'script-yukle') {
       await interaction.deferReply();
       const name = interaction.options.getString('isim');
@@ -448,7 +396,7 @@ client.on('interactionCreate', async interaction => {
       const scripts = data.scripts || {};
       if (Object.keys(scripts).length === 0) return await interaction.editReply({ content: "📭 Henüz script yok." });
       const embed = new EmbedBuilder().setTitle("📦 Yüklü Scriptler").setColor(0x58a6ff)
-        .setDescription("Toplam: **" + Object.keys(scripts).length + "**")
+        .setDescription("Toplam: **" + Object.keys(scripts).length + "** script")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       Object.entries(scripts).slice(0, 15).forEach(([hash, s]) => {
         const keyCount = Object.values(data.keys || {}).filter(k => k.scriptHash === hash).length;
@@ -461,7 +409,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply();
       const hash = interaction.options.getString('hash');
       const result = await apiPost("/api/delete_script", { hash });
-      await interaction.editReply({ content: result.ok ? "🗑️ Silindi." : "❌ Silinemedi." });
+      await interaction.editReply({ content: result.ok ? "🗑️ Script silindi." : "❌ Silinemedi." });
     }
 
     if (commandName === 'script-goster') {
@@ -473,7 +421,7 @@ client.on('interactionCreate', async interaction => {
       const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
       const userScript = 'script_key = "KEY-EKLE"\nloadstring(game:HttpGet("' + luaUrl + '"))()';
       const embed = new EmbedBuilder().setTitle("📜 " + found.name).setColor(0x58a6ff)
-        .setDescription("**Kod:**\n```lua\n" + userScript + "\n```")
+        .setDescription("**Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       await interaction.editReply({ embeds: [embed] });
     }
@@ -491,8 +439,8 @@ client.on('interactionCreate', async interaction => {
       if (keys[realKey].scriptHash !== found.hash) return await interaction.editReply({ content: "❌ Bu key bu script'e ait değil!" });
       const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
       const userScript = 'script_key = "' + realKey + '"\nloadstring(game:HttpGet("' + luaUrl + '"))()';
-      const embed = new EmbedBuilder().setTitle("📜 " + found.name + " • 🔑").setColor(0x3fb950)
-        .setDescription("**Kod:**\n```lua\n" + userScript + "\n```")
+      const embed = new EmbedBuilder().setTitle("📜 " + found.name + " • 🔑 Keyli").setColor(0x3fb950)
+        .setDescription("**Kullanıcıya Verilecek Kod:**\n```lua\n" + userScript + "\n```")
         .addFields(
           { name: "🔑 Key", value: "`" + realKey + "`", inline: false },
           { name: "📦 Script", value: found.name, inline: true },
@@ -517,9 +465,9 @@ client.on('interactionCreate', async interaction => {
         else if (k.usedBy) used++;
         else active++;
       });
-      const embed = new EmbedBuilder().setTitle("📊 " + found.name).setColor(0x58a6ff)
+      const embed = new EmbedBuilder().setTitle("📊 " + found.name + " İstatistikleri").setColor(0x58a6ff)
         .addFields(
-          { name: "🔑 Toplam", value: "**" + keys.length + "**", inline: true },
+          { name: "🔑 Toplam Key", value: "**" + keys.length + "**", inline: true },
           { name: "✅ Aktif", value: "**" + active + "**", inline: true },
           { name: "❌ Kullanılmış", value: "**" + used + "**", inline: true },
           { name: "⏰ Süresi Dolmuş", value: "**" + expired + "**", inline: true },
@@ -534,8 +482,8 @@ client.on('interactionCreate', async interaction => {
       const kelime = interaction.options.getString('kelime').toLowerCase();
       const data = await apiGet();
       const scripts = Object.entries(data.scripts || {}).filter(([h, s]) => s.name.toLowerCase().includes(kelime));
-      if (scripts.length === 0) return await interaction.editReply({ content: "🔍 Sonuç yok." });
-      const embed = new EmbedBuilder().setTitle("🔍 " + kelime).setColor(0x58a6ff)
+      if (scripts.length === 0) return await interaction.editReply({ content: "🔍 Sonuç bulunamadı." });
+      const embed = new EmbedBuilder().setTitle("🔍 Arama: " + kelime).setColor(0x58a6ff)
         .setDescription("**" + scripts.length + "** sonuç")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       scripts.slice(0, 10).forEach(([hash, s]) => {
@@ -556,7 +504,7 @@ client.on('interactionCreate', async interaction => {
       const embed = new EmbedBuilder().setTitle("📦 " + found.name).setColor(0x58a6ff)
         .addFields(
           { name: "🔗 Hash", value: "`" + found.hash + "`", inline: false },
-          { name: "🔑 Key", value: "**" + keyCount + "**", inline: true },
+          { name: "🔑 Key Sayısı", value: "**" + keyCount + "**", inline: true },
           { name: "📅 Yüklenme", value: new Date(s.createdAt).toLocaleString("tr-TR"), inline: true },
           { name: "📏 Boyut", value: (s.script.length / 1024).toFixed(2) + " KB", inline: true }
         )
@@ -574,7 +522,7 @@ client.on('interactionCreate', async interaction => {
       const result = await apiPost("/api/upload_script", { script: data.scripts[found.hash].script, name: yeniIsim });
       if (result.ok) {
         await apiPost("/api/delete_script", { hash: found.hash });
-        await interaction.editReply({ content: "✅ **" + yeniIsim + "** olarak kaydedildi." });
+        await interaction.editReply({ content: "✅ Yeniden adlandırıldı: **" + yeniIsim + "**" });
       } else await interaction.editReply({ content: "❌ " + result.err });
     }
 
@@ -588,7 +536,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply({ content: result.ok ? "✅ Kopyalandı!" : "❌ " + result.err });
     }
 
-    // ═══ KEY ═══
+    // ═══ KEY KOMUTLARI ═══
     if (commandName === 'key-olustur') {
       await interaction.deferReply();
       const scriptInput = interaction.options.getString('script');
@@ -601,14 +549,14 @@ client.on('interactionCreate', async interaction => {
       const result = await apiPost("/api/create_key", { scriptHash: found.hash, num: sure, unit: birim, note: not });
       if (result.ok) {
         const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
-        const embed = new EmbedBuilder().setTitle("🔑 Key").setColor(0x3fb950)
+        const embed = new EmbedBuilder().setTitle("🔑 Key Oluşturuldu").setColor(0x3fb950)
           .addFields(
             { name: "🔑 Key", value: "`" + result.key + "`", inline: false },
             { name: "📦 Script", value: found.name, inline: true },
             { name: "⏱️ Süre", value: sure + " " + UNIT_NAMES[birim], inline: true },
             { name: "📝 Not", value: not || "—", inline: false }
           )
-          .setDescription("**Kod:**\n```lua\nscript_key = \"" + result.key + "\"\nloadstring(game:HttpGet(\"" + luaUrl + "\"))()\n```")
+          .setDescription("**📜 Kullanıcı Scripti:**\n```lua\nscript_key = \"" + result.key + "\"\nloadstring(game:HttpGet(\"" + luaUrl + "\"))()\n```")
           .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
         await interaction.editReply({ embeds: [embed] });
       } else await interaction.editReply({ content: "❌ " + result.err });
@@ -620,7 +568,7 @@ client.on('interactionCreate', async interaction => {
       const keys = data.keys || {};
       if (Object.keys(keys).length === 0) return await interaction.editReply({ content: "📭 Key yok." });
       const embed = new EmbedBuilder().setTitle("🔑 Key Listesi").setColor(0x58a6ff)
-        .setDescription("Toplam: **" + Object.keys(keys).length + "**")
+        .setDescription("Toplam: **" + Object.keys(keys).length + "** key")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       const now = Date.now();
       Object.entries(keys).slice(0, 15).forEach(([key, v]) => {
@@ -660,9 +608,9 @@ client.on('interactionCreate', async interaction => {
       }
       const embed = new EmbedBuilder().setTitle("🔑 Toplu Key").setColor(0x3fb950)
         .addFields(
-          { name: "📦", value: found.name, inline: true },
-          { name: "⏱️", value: sure + " " + UNIT_NAMES[birim], inline: true },
-          { name: "🔢", value: createdKeys.length + "/" + miktar, inline: true }
+          { name: "📦 Script", value: found.name, inline: true },
+          { name: "⏱️ Süre", value: sure + " " + UNIT_NAMES[birim], inline: true },
+          { name: "🔢 Başarılı", value: createdKeys.length + "/" + miktar, inline: true }
         )
         .setDescription("**Keyler:**\n```\n" + createdKeys.join("\n") + "\n```")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
@@ -689,8 +637,8 @@ client.on('interactionCreate', async interaction => {
           { name: "📦 Script", value: scriptName, inline: true },
           { name: "📊 Durum", value: status, inline: true },
           { name: "📅 Bitiş", value: exp, inline: true },
-          { name: "👤", value: v.usedBy ? "`" + v.usedBy + "`" : "—", inline: true },
-          { name: "📝", value: v.note || "—", inline: true }
+          { name: "👤 Kullanan", value: v.usedBy ? "`" + v.usedBy + "`" : "—", inline: true },
+          { name: "📝 Not", value: v.note || "—", inline: true }
         )
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       await interaction.editReply({ embeds: [embed] });
@@ -702,7 +650,7 @@ client.on('interactionCreate', async interaction => {
       const data = await apiGet();
       const keys = Object.entries(data.keys || {}).filter(([k, v]) => k.toLowerCase().includes(kelime) || (v.note || "").toLowerCase().includes(kelime));
       if (keys.length === 0) return await interaction.editReply({ content: "🔍 Sonuç yok." });
-      const embed = new EmbedBuilder().setTitle("🔍 " + kelime).setColor(0x58a6ff)
+      const embed = new EmbedBuilder().setTitle("🔍 Key Arama: " + kelime).setColor(0x58a6ff)
         .setDescription("**" + keys.length + "** sonuç")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       keys.slice(0, 10).forEach(([key, v]) => {
@@ -776,7 +724,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply({ content: "🗑️ **" + silinen + "** key silindi." });
     }
 
-    // ═══ BAN ═══
+    // ═══ BAN KOMUTLARI ═══
     if (commandName === 'ban') {
       await interaction.deferReply();
       const userId = interaction.options.getString('userid');
@@ -789,7 +737,7 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply();
       const userId = interaction.options.getString('userid');
       const result = await apiPost("/api/unban_user", { userId });
-      await interaction.editReply({ content: result.ok ? "✅ Kaldırıldı." : "❌ Kaldırılamadı." });
+      await interaction.editReply({ content: result.ok ? "✅ Ban kaldırıldı." : "❌ Kaldırılamadı." });
     }
 
     if (commandName === 'ban-listele') {
@@ -797,7 +745,7 @@ client.on('interactionCreate', async interaction => {
       const data = await apiGet();
       const banned = data.banned || {};
       if (Object.keys(banned).length === 0) return await interaction.editReply({ content: "✅ Banlı yok." });
-      const embed = new EmbedBuilder().setTitle("🚫 Banlı").setColor(0xf85149)
+      const embed = new EmbedBuilder().setTitle("🚫 Banlı Kullanıcılar").setColor(0xf85149)
         .setDescription("Toplam: **" + Object.keys(banned).length + "**")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       Object.entries(banned).slice(0, 15).forEach(([uid, info]) => {
@@ -812,7 +760,7 @@ client.on('interactionCreate', async interaction => {
       const data = await apiGet();
       if ((data.banned || {})[userId]) {
         const info = data.banned[userId];
-        const embed = new EmbedBuilder().setTitle("🚫 Banlı").setColor(0xf85149)
+        const embed = new EmbedBuilder().setTitle("🚫 Kullanıcı Banlı").setColor(0xf85149)
           .addFields(
             { name: "UserID", value: "`" + userId + "`", inline: false },
             { name: "Sebep", value: info.reason || "—", inline: false },
@@ -829,7 +777,7 @@ client.on('interactionCreate', async interaction => {
       const data = await apiGet();
       const banned = data.banned || {};
       const embed = new EmbedBuilder().setTitle("📊 Ban İstatistikleri").setColor(0x58a6ff)
-        .addFields({ name: "🚫 Toplam", value: "**" + Object.keys(banned).length + "**", inline: true })
+        .addFields({ name: "🚫 Toplam Banlı", value: "**" + Object.keys(banned).length + "**", inline: true })
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       Object.entries(banned).slice(-5).reverse().forEach(([uid, info]) => {
         embed.addFields({ name: "🚫 `" + uid + "`", value: info.reason || "—", inline: false });
@@ -842,22 +790,22 @@ client.on('interactionCreate', async interaction => {
       const userId = interaction.options.getString('userid');
       const sebep = interaction.options.getString('sebep');
       const result = await apiPost("/api/ban_user", { userId, reason: sebep, bannedBy: interaction.user.tag });
-      await interaction.editReply({ content: result.ok ? "✅ Güncellendi." : "❌ Hata" });
+      await interaction.editReply({ content: result.ok ? "✅ Sebep güncellendi." : "❌ Hata" });
     }
 
-    // ═══ AKTİF ═══
+    // ═══ AKTİF KOMUTLARI ═══
     if (commandName === 'aktif-listele') {
       await interaction.deferReply();
       const data = await apiGet();
       const active = data.active || {};
-      if (Object.keys(active).length === 0) return await interaction.editReply({ content: "📭 Aktif yok." });
+      if (Object.keys(active).length === 0) return await interaction.editReply({ content: "📭 Aktif kullanıcı yok." });
       const embed = new EmbedBuilder().setTitle("📡 Aktif Kullanıcılar").setColor(0x58a6ff)
         .setDescription("Toplam: **" + Object.keys(active).length + "**")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       Object.entries(active).slice(0, 15).forEach(([uid, u]) => {
         const sec = Math.floor((Date.now() - (u.joinedAt || 0)) / 1000);
         const ts = sec < 60 ? sec + " sn" : (sec < 3600 ? Math.floor(sec / 60) + " dk" : Math.floor(sec / 3600) + " sa");
-        embed.addFields({ name: "📡 " + (u.username || "—"), value: "ID: `" + uid + "`\n🎮 " + (u.gameName || "—") + "\n📦 " + (u.scriptName || "—") + "\n⏱️ " + ts, inline: false });
+        embed.addFields({ name: "📡 " + (u.username || "—"), value: "ID: `" + uid + "`\n🎮 " + (u.gameName || "—") + "\n📦 " + (u.scriptName || "—") + "\n⏱️ " + ts + " önce", inline: false });
       });
       await interaction.editReply({ embeds: [embed] });
     }
@@ -874,14 +822,14 @@ client.on('interactionCreate', async interaction => {
       const userId = interaction.options.getString('userid');
       await apiPost("/api/remove_active", { userId });
       const result = await apiPost("/api/ban_user", { userId, reason: "Panelden ban", bannedBy: interaction.user.tag });
-      await interaction.editReply({ content: result.ok ? "🚫 Banlandı." : "❌ Banlanamadı." });
+      await interaction.editReply({ content: result.ok ? "🚫 Banlandı ve çıkarıldı." : "❌ Banlanamadı." });
     }
 
     if (commandName === 'aktif-say') {
       await interaction.deferReply();
       const data = await apiGet();
       const count = Object.keys(data.active || {}).length;
-      await interaction.editReply({ content: "📡 **" + count + "** kişi aktif." });
+      await interaction.editReply({ content: "📡 Şu an **" + count + "** kişi aktif." });
     }
 
     if (commandName === 'aktif-bilgi') {
@@ -889,22 +837,22 @@ client.on('interactionCreate', async interaction => {
       const userId = interaction.options.getString('userid');
       const data = await apiGet();
       const u = (data.active || {})[userId];
-      if (!u) return await interaction.editReply({ content: "❌ Aktif değil." });
+      if (!u) return await interaction.editReply({ content: "❌ Bu kullanıcı aktif değil." });
       const sec = Math.floor((Date.now() - (u.joinedAt || 0)) / 1000);
       const ts = sec < 60 ? sec + " sn" : (sec < 3600 ? Math.floor(sec / 60) + " dk" : Math.floor(sec / 3600) + " sa");
       const embed = new EmbedBuilder().setTitle("📡 Aktif Kullanıcı").setColor(0x58a6ff)
         .addFields(
-          { name: "👤", value: u.username || "—", inline: true },
-          { name: "🆔", value: "`" + userId + "`", inline: true },
-          { name: "🎮", value: u.gameName || "—", inline: true },
-          { name: "📦", value: u.scriptName || "—", inline: true },
-          { name: "⏱️", value: ts + " önce", inline: true }
+          { name: "👤 Kullanıcı", value: u.username || "—", inline: true },
+          { name: "🆔 UserID", value: "`" + userId + "`", inline: true },
+          { name: "🎮 Oyun", value: u.gameName || "—", inline: true },
+          { name: "📦 Script", value: u.scriptName || "—", inline: true },
+          { name: "⏱️ Süre", value: ts + " önce", inline: true }
         )
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       await interaction.editReply({ embeds: [embed] });
     }
 
-    // ═══ TRIAL ═══
+    // ═══ TRIAL, İSTATİSTİK ═══
     if (commandName === 'trial-olustur') {
       await interaction.deferReply();
       const scriptInput = interaction.options.getString('script');
@@ -914,11 +862,11 @@ client.on('interactionCreate', async interaction => {
       const result = await apiPost("/api/create_trial", { scriptHash: found.hash });
       if (result.ok) {
         const luaUrl = WORKER_URL + "/scripts/" + found.hash + ".lua";
-        const embed = new EmbedBuilder().setTitle("🎁 Trial").setColor(0xa855f7)
+        const embed = new EmbedBuilder().setTitle("🎁 Trial Key").setColor(0xa855f7)
           .addFields(
             { name: "🔑 Key", value: "`trial`", inline: true },
-            { name: "📦", value: found.name, inline: true },
-            { name: "⏱️", value: "Sınırsız", inline: true }
+            { name: "📦 Script", value: found.name, inline: true },
+            { name: "⏱️ Süre", value: "Sınırsız", inline: true }
           )
           .setDescription("**Kod:**\n```lua\nscript_key = \"trial\"\nloadstring(game:HttpGet(\"" + luaUrl + "\"))()\n```")
           .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
@@ -939,13 +887,13 @@ client.on('interactionCreate', async interaction => {
         else if (k.usedBy) used++;
         else active++;
       });
-      const embed = new EmbedBuilder().setTitle("📊 İstatistikler").setColor(0x58a6ff)
+      const embed = new EmbedBuilder().setTitle("📊 LestaSec İstatistikleri").setColor(0x58a6ff)
         .addFields(
-          { name: "📦 Script", value: "**" + scripts.length + "**", inline: true },
-          { name: "🔑 Key", value: "**" + keys.length + "**", inline: true },
+          { name: "📦 Toplam Script", value: "**" + scripts.length + "**", inline: true },
+          { name: "🔑 Toplam Key", value: "**" + keys.length + "**", inline: true },
           { name: "✅ Aktif", value: "**" + active + "**", inline: true },
           { name: "❌ Kullanılmış", value: "**" + used + "**", inline: true },
-          { name: "⏰ Dolmuş", value: "**" + expired + "**", inline: true },
+          { name: "⏰ Süresi Dolmuş", value: "**" + expired + "**", inline: true },
           { name: "🎁 Trial", value: "**" + trial + "**", inline: true },
           { name: "🚫 Banlı", value: "**" + Object.keys(data.banned || {}).length + "**", inline: true },
           { name: "📡 Aktif", value: "**" + Object.keys(data.active || {}).length + "**", inline: true }
@@ -957,17 +905,17 @@ client.on('interactionCreate', async interaction => {
     // ═══ YARDIM ═══
     if (commandName === 'yardim') {
       const embed = new EmbedBuilder().setTitle("📖 Lesta Bot Komutları").setColor(0x58a6ff)
-        .setDescription("**" + commands.length + " komut** - v5.3")
+        .setDescription("**" + commands.length + " komut** - LestaSec Cyber Engine v5.3")
         .addFields(
-          { name: "📦 Script (10)", value: "script-yukle, script-listele, script-sil, script-goster, script-keyli-goster, script-istatistik, script-arama, script-yeniden-adlandir, script-kopyala, script-bilgi", inline: false },
-          { name: "🔑 Key (11)", value: "key-olustur, key-listele, key-sil, key-toplu-olustur, key-uzat, key-bilgi, key-ara, key-istatistik, key-kopyala, key-toplu-sil", inline: false },
-          { name: "🚫 Ban (6)", value: "ban, unban, ban-listele, ban-kontrol, ban-istatistik, ban-sebep-degistir", inline: false },
-          { name: "📡 Aktif (5)", value: "aktif-listele, aktif-sil, aktif-banla, aktif-say, aktif-bilgi", inline: false },
-          { name: "🎯 Drop (4)", value: "key-drop, key-drop-iptal, key-drop-istatistik, key-drop-gecmis", inline: false },
-          { name: "🛡️ Moderasyon (12)", value: "kick, mod-ban, mod-unban, mute, unmute, clear, slowmode, lock, unlock, addrole, removerole, nickname", inline: false },
-          { name: "🎭 Buton Rol (3)", value: "buton-rol-olustur, buton-rol-sil, buton-rol-listele", inline: false },
-          { name: "📝 Not (5)", value: "not-ekle, not-listele, not-sil, not-temizle, not-bilgi", inline: false },
-          { name: "🤖 Bot (7)", value: "bot-ping, bot-bilgi, kullanici-bilgi, sunucu-bilgi, komut-sayisi, istatistik, trial-olustur", inline: false }
+          { name: "📦 Script", value: "script-yukle, script-listele, script-sil, script-goster, script-keyli-goster, script-istatistik, script-arama, script-yeniden-adlandir, script-kopyala, script-bilgi", inline: false },
+          { name: "🔑 Key", value: "key-olustur, key-listele, key-sil, key-toplu-olustur, key-uzat, key-bilgi, key-ara, key-istatistik, key-kopyala, key-toplu-sil", inline: false },
+          { name: "🚫 Ban", value: "ban, unban, ban-listele, ban-kontrol, ban-istatistik, ban-sebep-degistir", inline: false },
+          { name: "📡 Aktif", value: "aktif-listele, aktif-sil, aktif-banla, aktif-say, aktif-bilgi", inline: false },
+          { name: "🎯 Drop", value: "key-drop, key-drop-iptal, key-drop-istatistik, key-drop-gecmis", inline: false },
+          { name: "🛡️ Moderasyon", value: "kick, mod-ban, mod-unban, mute, unmute, clear, slowmode, lock, unlock, addrole, removerole, nickname", inline: false },
+          { name: "🎭 Buton Rol", value: "buton-rol-olustur, buton-rol-sil, buton-rol-listele", inline: false },
+          { name: "📝 Not", value: "not-ekle, not-listele, not-sil, not-temizle, not-bilgi", inline: false },
+          { name: "🤖 Bot", value: "bot-ping, bot-bilgi, kullanici-bilgi, sunucu-bilgi, komut-sayisi, istatistik, trial-olustur", inline: false }
         )
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       await interaction.reply({ embeds: [embed] });
@@ -975,7 +923,7 @@ client.on('interactionCreate', async interaction => {
 
     // ═══ BOT PING ═══
     if (commandName === 'bot-ping') {
-      await interaction.reply({ content: "🏓 **Pong!**\nWebsocket: **" + client.ws.ping + "ms**", ephemeral: true });
+      await interaction.reply({ content: "🏓 **Pong!**\nWebsocket Ping: **" + client.ws.ping + "ms**", ephemeral: true });
     }
 
     // ═══ BOT BİLGİ ═══
@@ -1004,8 +952,8 @@ client.on('interactionCreate', async interaction => {
       const embed = new EmbedBuilder().setTitle("👤 Kullanıcı Bilgisi").setColor(0x58a6ff)
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
         .addFields(
-          { name: "👤", value: user.tag, inline: true },
-          { name: "🆔", value: "`" + user.id + "`", inline: true },
+          { name: "👤 Ad", value: user.tag, inline: true },
+          { name: "🆔 ID", value: "`" + user.id + "`", inline: true },
           { name: "📅 Hesap", value: new Date(user.createdAt).toLocaleString("tr-TR"), inline: false },
           { name: "📥 Katılma", value: member ? new Date(member.joinedAt).toLocaleString("tr-TR") : "—", inline: false }
         )
@@ -1019,13 +967,13 @@ client.on('interactionCreate', async interaction => {
       const embed = new EmbedBuilder().setTitle("🏠 Sunucu Bilgisi").setColor(0x58a6ff)
         .setThumbnail(guild.iconURL({ dynamic: true }))
         .addFields(
-          { name: "📛", value: guild.name, inline: true },
-          { name: "🆔", value: "`" + guild.id + "`", inline: true },
-          { name: "👑", value: "<@" + guild.ownerId + ">", inline: true },
-          { name: "👥", value: "**" + guild.memberCount + "**", inline: true },
-          { name: "📺", value: "**" + guild.channels.cache.size + "**", inline: true },
-          { name: "🎭", value: "**" + guild.roles.cache.size + "**", inline: true },
-          { name: "📅", value: new Date(guild.createdAt).toLocaleString("tr-TR"), inline: false }
+          { name: "📛 Ad", value: guild.name, inline: true },
+          { name: "🆔 ID", value: "`" + guild.id + "`", inline: true },
+          { name: "👑 Sahip", value: "<@" + guild.ownerId + ">", inline: true },
+          { name: "👥 Üye", value: "**" + guild.memberCount + "**", inline: true },
+          { name: "📺 Kanal", value: "**" + guild.channels.cache.size + "**", inline: true },
+          { name: "🎭 Rol", value: "**" + guild.roles.cache.size + "**", inline: true },
+          { name: "📅 Kuruluş", value: new Date(guild.createdAt).toLocaleString("tr-TR"), inline: false }
         )
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       await interaction.reply({ embeds: [embed] });
@@ -1033,205 +981,14 @@ client.on('interactionCreate', async interaction => {
 
     // ═══ KOMUT SAYISI ═══
     if (commandName === 'komut-sayisi') {
-      await interaction.reply({ content: "📖 **" + commands.length + "** komut.", ephemeral: true });
-    }
-
-    // ═══ MODERASYON ═══
-    if (commandName === 'kick') {
-      await interaction.deferReply();
-      const user = interaction.options.getUser('kullanici');
-      const sebep = interaction.options.getString('sebep') || 'Belirtilmedi';
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-      if (!member) return await interaction.editReply({ content: "❌ Bulunamadı." });
-      if (!member.kickable) return await interaction.editReply({ content: "❌ Atamam." });
-      try { await member.kick(sebep); await interaction.editReply({ content: "👢 **" + user.tag + "** atıldı.\n**Sebep:** " + sebep }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'mod-ban') {
-      await interaction.deferReply();
-      const user = interaction.options.getUser('kullanici');
-      const sebep = interaction.options.getString('sebep') || 'Belirtilmedi';
-      const gun = interaction.options.getInteger('gun') || 0;
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-      if (!member) return await interaction.editReply({ content: "❌ Bulunamadı." });
-      if (!member.bannable) return await interaction.editReply({ content: "❌ Banlayamam." });
-      try { await member.ban({ reason: sebep, deleteMessageSeconds: gun * 86400 }); await interaction.editReply({ content: "🔨 **" + user.tag + "** banlandı.\n**Sebep:** " + sebep }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'mod-unban') {
-      await interaction.deferReply();
-      const userId = interaction.options.getString('userid');
-      try { await interaction.guild.members.unban(userId); await interaction.editReply({ content: "✅ Kaldırıldı: `" + userId + "`" }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'mute') {
-      await interaction.deferReply();
-      const user = interaction.options.getUser('kullanici');
-      const dakika = interaction.options.getInteger('dakika');
-      const sebep = interaction.options.getString('sebep') || 'Belirtilmedi';
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-      if (!member) return await interaction.editReply({ content: "❌ Bulunamadı." });
-      try { await member.timeout(dakika * 60 * 1000, sebep); await interaction.editReply({ content: "🔇 **" + user.tag + "** susturuldu. (" + dakika + " dk)\n**Sebep:** " + sebep }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'unmute') {
-      await interaction.deferReply();
-      const user = interaction.options.getUser('kullanici');
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-      if (!member) return await interaction.editReply({ content: "❌ Bulunamadı." });
-      try { await member.timeout(null); await interaction.editReply({ content: "🔊 **" + user.tag + "** susturması kaldırıldı." }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'clear') {
-      await interaction.deferReply({ ephemeral: true });
-      let miktar = interaction.options.getInteger('miktar');
-      if (miktar > 100) miktar = 100;
-      if (miktar < 1) miktar = 1;
-      try { const deleted = await interaction.channel.bulkDelete(miktar, true); await interaction.editReply({ content: "🗑️ **" + deleted.size + "** mesaj silindi." }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'slowmode') {
-      await interaction.deferReply();
-      const saniye = interaction.options.getInteger('saniye');
-      try { await interaction.channel.setRateLimitPerUser(saniye); await interaction.editReply({ content: saniye === 0 ? "🐇 Kapatıldı." : "🐌 **" + saniye + " saniye**" }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'lock') {
-      await interaction.deferReply();
-      try { await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }); await interaction.editReply({ content: "🔒 Kilitlendi." }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'unlock') {
-      await interaction.deferReply();
-      try { await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: null }); await interaction.editReply({ content: "🔓 Açıldı." }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'addrole') {
-      await interaction.deferReply();
-      const user = interaction.options.getUser('kullanici');
-      const role = interaction.options.getRole('rol');
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-      if (!member) return await interaction.editReply({ content: "❌ Bulunamadı." });
-      try { await member.roles.add(role); await interaction.editReply({ content: "✅ **" + role.name + "** verildi: " + user.tag }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'removerole') {
-      await interaction.deferReply();
-      const user = interaction.options.getUser('kullanici');
-      const role = interaction.options.getRole('rol');
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-      if (!member) return await interaction.editReply({ content: "❌ Bulunamadı." });
-      try { await member.roles.remove(role); await interaction.editReply({ content: "✅ **" + role.name + "** alındı: " + user.tag }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'nickname') {
-      await interaction.deferReply();
-      const user = interaction.options.getUser('kullanici');
-      const yeniIsim = interaction.options.getString('yeni_isim');
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-      if (!member) return await interaction.editReply({ content: "❌ Bulunamadı." });
-      try { await member.setNickname(yeniIsim); await interaction.editReply({ content: "✏️ **" + yeniIsim + "** olarak değiştirildi." }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    // ═══ BUTON ROL ═══
-    if (commandName === 'buton-rol-olustur') {
-      await interaction.deferReply();
-      const baslik = interaction.options.getString('baslik');
-      const roller = [];
-      for (let i = 1; i <= 5; i++) {
-        const r = interaction.options.getRole('rol' + i);
-        if (r) roller.push(r);
-      }
-      if (roller.length === 0) return await interaction.editReply({ content: "❌ En az 1 rol." });
-      const embed = new EmbedBuilder().setTitle("🎭 " + baslik).setColor(0x8b5cf6)
-        .setDescription("Butonlara basarak rol alabilirsin.\n\n" + roller.map(r => "• " + r.toString()).join("\n"))
-        .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
-      const row = new ActionRowBuilder();
-      roller.forEach(r => { row.addComponents(new ButtonBuilder().setCustomId("btnrole_" + r.id).setLabel(r.name).setStyle(ButtonStyle.Secondary)); });
-      const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
-      buttonRoles.set(msg.id, { roles: roller.map(r => ({ roleId: r.id, roleName: r.name })), guildId: interaction.guildId });
-      await interaction.editReply({ content: "✅ Oluşturuldu!" });
-    }
-
-    if (commandName === 'buton-rol-sil') {
-      await interaction.deferReply();
-      const messageId = interaction.options.getString('messageid');
-      try { const msg = await interaction.channel.messages.fetch(messageId); await msg.delete(); buttonRoles.delete(messageId); await interaction.editReply({ content: "🗑️ Silindi." }); }
-      catch (e) { await interaction.editReply({ content: "❌ " + e.message }); }
-    }
-
-    if (commandName === 'buton-rol-listele') {
-      await interaction.deferReply();
-      if (buttonRoles.size === 0) return await interaction.editReply({ content: "📭 Yok." });
-      const embed = new EmbedBuilder().setTitle("🎭 Buton Roller").setColor(0x58a6ff)
-        .setDescription("Toplam: **" + buttonRoles.size + "**")
-        .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
-      let i = 1;
-      for (const [msgId, data] of buttonRoles.entries()) { embed.addFields({ name: "#" + i + " (" + msgId + ")", value: data.roles.map(r => "• " + r.roleName).join("\n"), inline: false }); i++; }
-      await interaction.editReply({ embeds: [embed] });
-    }
-
-    // ═══ NOT ═══
-    if (commandName === 'not-ekle') {
-      await interaction.deferReply({ ephemeral: true });
-      const not = interaction.options.getString('not');
-      const userId = interaction.user.id;
-      if (!notes.has(userId)) notes.set(userId, []);
-      const userNotes = notes.get(userId);
-      if (userNotes.length >= 20) return await interaction.editReply({ content: "❌ Maks 20 not." });
-      userNotes.push({ text: not, createdAt: Date.now() });
-      await interaction.editReply({ content: "✅ Eklendi! (" + userNotes.length + "/20)\n📝 " + not });
-    }
-
-    if (commandName === 'not-listele') {
-      await interaction.deferReply({ ephemeral: true });
-      const userNotes = notes.get(interaction.user.id) || [];
-      if (userNotes.length === 0) return await interaction.editReply({ content: "📭 Notun yok." });
-      const embed = new EmbedBuilder().setTitle("📝 Notların").setColor(0x58a6ff)
-        .setDescription("Toplam: **" + userNotes.length + "**")
-        .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
-      userNotes.forEach((n, i) => { embed.addFields({ name: "#" + (i + 1) + " (" + new Date(n.createdAt).toLocaleString("tr-TR") + ")", value: n.text, inline: false }); });
-      await interaction.editReply({ embeds: [embed] });
-    }
-
-    if (commandName === 'not-sil') {
-      await interaction.deferReply({ ephemeral: true });
-      const index = interaction.options.getInteger('index') - 1;
-      const userNotes = notes.get(interaction.user.id) || [];
-      if (index < 0 || index >= userNotes.length) return await interaction.editReply({ content: "❌ Geçersiz." });
-      const silinen = userNotes.splice(index, 1)[0];
-      await interaction.editReply({ content: "🗑️ Silindi: " + silinen.text });
-    }
-
-    if (commandName === 'not-temizle') {
-      await interaction.deferReply({ ephemeral: true });
-      notes.delete(interaction.user.id);
-      await interaction.editReply({ content: "🗑️ Hepsi silindi." });
-    }
-
-    if (commandName === 'not-bilgi') {
-      await interaction.deferReply({ ephemeral: true });
-      const userNotes = notes.get(interaction.user.id) || [];
-      await interaction.editReply({ content: "📊 **" + userNotes.length + "/20**" });
+      await interaction.reply({ content: "📖 Toplam **" + commands.length + "** komut.", ephemeral: true });
     }
 
     // ═══ KEY DROP ═══
     if (commandName === 'key-drop') {
       await interaction.deferReply({ ephemeral: true });
       const existing = Array.from(activeDrops.values()).find(d => d.guildId === interaction.guildId);
-      if (existing) return await interaction.editReply({ content: "⚠️ Aktif drop var." });
+      if (existing) return await interaction.editReply({ content: "⚠️ Bu sunucuda zaten aktif drop var! `/key-drop-iptal`" });
       const scriptInput = interaction.options.getString('script');
       const yontem = interaction.options.getString('yontem');
       const sure = interaction.options.getInteger('sure');
@@ -1240,12 +997,12 @@ client.on('interactionCreate', async interaction => {
       const not = interaction.options.getString('not') || "Key Drop";
       const data = await apiGet();
       const found = findScript(data.scripts || {}, scriptInput);
-      if (!found) return await interaction.editReply({ content: "❌ Bulunamadı." });
+      if (!found) return await interaction.editReply({ content: "❌ Script bulunamadı." });
       const dropId = Date.now().toString(36);
       if (yontem === 'sayi') {
         const secretNumber = Math.floor(Math.random() * 51);
-        const embed = new EmbedBuilder().setTitle("🎯 KEY DROP - SAYI").setColor(0xa855f7)
-          .setDescription("**Script:** " + found.name + "\n**Süre:** " + sure + " " + UNIT_NAMES[birim] + "\n\n1️⃣ 0-50 arası sayı tuttum\n2️⃣ Kanala tahmin yaz\n3️⃣ İlk bilen kazanır!\n\n⚡ Sınırsız tahmin!")
+        const embed = new EmbedBuilder().setTitle("🎯 KEY DROP - SAYI TAHMİN").setColor(0xa855f7)
+          .setDescription("**Script:** " + found.name + "\n**Key Süresi:** " + sure + " " + UNIT_NAMES[birim] + "\n\n**Nasıl oynanır?**\n1️⃣ 0-50 arası sayı tuttum\n2️⃣ Kanalda tahminini yaz\n3️⃣ **Doğru bilen kazanır!**\n\n⚡ Sınırsız tahmin yapabilirsin!")
           .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
         const dropMsg = await kanal.send({ embeds: [embed] });
         activeDrops.set(dropId, { guildId: interaction.guildId, channelId: kanal.id, messageId: dropMsg.id, method: 'sayi', secretNumber, winnerId: null, scriptHash: found.hash, scriptName: found.name, sure, birim, note: not, startedAt: Date.now() });
@@ -1253,7 +1010,7 @@ client.on('interactionCreate', async interaction => {
       }
       if (yontem === 'buton') {
         const embed = new EmbedBuilder().setTitle("⚡ KEY DROP - İLK BASAN").setColor(0xf85149)
-          .setDescription("**Script:** " + found.name + "\n**Süre:** " + sure + " " + UNIT_NAMES[birim] + "\n\n**İLK BASAN KAZANIR!**")
+          .setDescription("**Script:** " + found.name + "\n**Key Süresi:** " + sure + " " + UNIT_NAMES[birim] + "\n\n**İLK BASAN KAZANIR!**")
           .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
         const kapBtn = new ButtonBuilder().setCustomId("drop_buton_" + dropId).setLabel("⚡ KAPIYORUM!").setStyle(ButtonStyle.Danger);
         const dropMsg = await kanal.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(kapBtn)] });
@@ -1262,16 +1019,17 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
+    // ═══ KEY DROP İPTAL ═══
     if (commandName === 'key-drop-iptal') {
       await interaction.deferReply({ ephemeral: true });
       const drops = Array.from(activeDrops.entries()).filter(([id, d]) => d.guildId === interaction.guildId);
-      if (drops.length === 0) return await interaction.editReply({ content: "📭 Aktif yok." });
+      if (drops.length === 0) return await interaction.editReply({ content: "📭 Aktif drop yok." });
       for (const [dropId, drop] of drops) {
         try {
           const channel = await client.channels.fetch(drop.channelId);
           const message = await channel.messages.fetch(drop.messageId);
-          const cancelledEmbed = new EmbedBuilder().setTitle("🚫 İPTAL").setColor(0xf85149)
-            .setDescription("**" + drop.scriptName + "**\n\nYetkili iptal etti.")
+          const cancelledEmbed = new EmbedBuilder().setTitle("🚫 DROP İPTAL").setColor(0xf85149)
+            .setDescription("**Script:** " + drop.scriptName + "\n\nYetkili tarafından iptal edildi.")
             .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
           let components = [];
           if (drop.method === 'buton') {
@@ -1282,12 +1040,13 @@ client.on('interactionCreate', async interaction => {
         } catch (e) {}
         activeDrops.delete(dropId);
       }
-      await interaction.editReply({ content: "✅ " + drops.length + " iptal edildi." });
+      await interaction.editReply({ content: "✅ " + drops.length + " drop iptal edildi." });
     }
 
+    // ═══ DROP İSTATİSTİK ═══
     if (commandName === 'key-drop-istatistik') {
       await interaction.deferReply();
-      const embed = new EmbedBuilder().setTitle("📊 Drop İstatistik").setColor(0x58a6ff)
+      const embed = new EmbedBuilder().setTitle("📊 Drop İstatistikleri").setColor(0x58a6ff)
         .addFields(
           { name: "🎯 Toplam", value: "**" + dropHistory.length + "**", inline: true },
           { name: "🔢 Sayı", value: "**" + dropHistory.filter(d => d.method === 'sayi').length + "**", inline: true },
@@ -1298,11 +1057,12 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply({ embeds: [embed] });
     }
 
+    // ═══ DROP GEÇMİŞ ═══
     if (commandName === 'key-drop-gecmis') {
       await interaction.deferReply();
-      if (dropHistory.length === 0) return await interaction.editReply({ content: "📭 Geçmiş yok." });
-      const embed = new EmbedBuilder().setTitle("📜 Geçmiş").setColor(0x58a6ff)
-        .setDescription("Son **" + Math.min(dropHistory.length, 10) + "**")
+      if (dropHistory.length === 0) return await interaction.editReply({ content: "📭 Drop geçmişi yok." });
+      const embed = new EmbedBuilder().setTitle("📜 Drop Geçmişi").setColor(0x58a6ff)
+        .setDescription("Son **" + Math.min(dropHistory.length, 10) + "** drop")
         .setFooter({ text: "LestaSec Cyber Engine v5.3" }).setTimestamp();
       dropHistory.slice(0, 10).forEach(d => {
         const time = Math.floor((Date.now() - d.wonAt) / 60000);
